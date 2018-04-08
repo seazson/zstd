@@ -1,0 +1,307 @@
+						CSME Protocol Driver
+					============================
+Introduction:
+=============
+
+This driver provides a generic socket APIs to the user by implementing a new 
+socket family of type AF_CSM_ENCAPS. The socket type is SOCK_DGRAM and it bypasses
+TCP/IP layers and sends data directly to the Ethernet.
+
+    Note:
+        1. Application need to open only one socket to control all MSP devices over all ethernet interfaces.
+        2. Ack Suppression option can be enable or disable for each MSP device using setsockopt system call
+	   (see example below).
+        3. In CSME Protocol driver, resources for target gets created when
+        	a. Application sends first command of supervisory channel OR
+ 	        b. Application sends MASS ASSIGN command OR
+        	c. Applications set socket options before sending any command to target.
+           These resources get destroyed only after removal of CSME protocol driver module. 
+        4. In CSME Protocol driver, resources for channel gets created when application sends 
+           first command on channel. If channel resources are already created then they will get
+           reset after the successful response of CREATE CHANNEL from MSP.
+           These resources get destroyed only after removal of CSME protocol driver module.
+
+
+Building CSMENCAPS module:
+========================
+
+To steps to build CSMENCAPS module for ARM platform:
+
+         1.	Chagall Linux kernel should be compiled with CSMENCAPS module option.
+         2.	Open Make file and set following variables.
+                 a.	ARCH=armv4 
+                 b.	KERNEL_DIR - Path of Chagall Linux kernel source tree.
+                 c.	Save the file.
+         3.	Execute following command
+                 $make
+         4.	Copy csmencaps.o into NFS directory(lib/modules/2.4.19-rmk4/kernel/net/csmencaps)
+         5.	Boot Chagall Linux
+         6.	Install CSMENCAPS module
+                $insmod csmencaps
+
+To steps to build CSMENCAPS module for Intel platform:
+
+		 1. Execute following command
+				$make ARCH=i386
+         2.	Install CSMENCAPS module
+                $insmod csmencaps.o
+
+CSMENCAPS Driver Supports Following BSD Socket APIs:
+===================================================
+
+socket - to Open the Socket.
+close - to Close the Socket.
+setsockopt - to set socket options.
+sendto/recvfrom/sendmsg/recvmsg - to send and receive one or more MSP command in one packet. 
+sendto and sendmsg return the total number of bytes sent.
+recvfrom and recvmsg return the total number of bytes received.
+
+
+Example: recvfrom system call 
+================================================================================
+structure Csmecmd_s is defined in if_csmencapse.h. 
+
+
+
+ 
+static int recv_message_example(int sockfd) // It will receive one CSME packet from the 
+											// specified socket
+
+// sockfd: socket descriptor
+{
+	struct sockaddr_csme sockaddr;
+	char *buf;
+	int len;
+  
+	buf = malloc(MAX_LEN);	/* MAX_LEN is the ethernet mtu ~1500 bytes */ 
+	if (buf == NULL) {
+		printf("could not allocate receive buffer\n");
+		exit(1);
+	}
+
+	len = recvfrom(sockfd, buf, MAX_LEN, 0, &sockaddr, sizeof(sockaddr));
+	if (len < 0) {
+		perror("recvmsg");
+		exit(1);
+	}
+
+	printf("Total number of bytes received = %d\n", len);
+
+  	return 0;
+}//end of   recv_message_example
+
+
+It also supports 'select' and 'ioctl' system call.
+
+Example: setsockopt system call to enable/disable Ack suppression on each device
+================================================================================
+The include  file  < include/linux/if_csmencaps.h> contains definitions for 
+socket level options. The following are definitions for CSME socket driver options .
+
+/* include/linux/if_csmencaps.h */
+
+#define CSME_ACK_ENABLE     1 	/* Name of the socket level option. */
+
+struct csme_ackopt {
+	unsigned char	scsme_devmac[6];	/* Targer Device MAC */
+	int		scsme_ifindex;		/* interface index */
+	unsigned char	ack_suppression;	/* 0 = ACK Packet is required(default) */
+						/* 1 = ACK packet must be suppressed */
+};
+
+/* include/linux/socket.h */
+#define AF_CSM_ENCAPS   	27      /* CSM_ENCAPS Protocol          */
+#define SOL_CSM_ENCAPS      269
+
+/* include/linux/if_ether.h */
+#define ETH_P_CSM_ENCAPS        0x889B  /* CSM_ENCAPS packet */
+
+/* Example code */
+/*============================================================================
+ *	COPYRIGHT(c) 2007 Mindspeed Technologies.
+ *	Mindspeed proprietary information.
+ *		ALL RIGHTS RESERVED
+ *	This is Unpublished Proprietary Source Code of Mindspeed Technologies
+ *	File Purpose : This simple application does:
+ *				initializes a CSME socket
+ *				sends a get arm version query to the device
+ *				waits for the response
+ *				exits
+ *                            
+============================================================================*/
+#include <arpa/inet.h>
+#include <errno.h>
+#include <stdio.h>
+#include <string.h>
+#include <stdlib.h>
+#include <sys/socket.h>
+#include <net/if.h>
+
+#include "if_csmencaps.h"
+
+/* include/linux/socket.h */
+#define SOL_CSM_ENCAPS 		269
+
+#define CSME_ACK_ENABLE		1
+#define ETH_P_CSME_BE		0x9b88
+#define CSME_OPCODE_CONTROL_BE	0x0100
+
+#define MAX_MSP_MSG_LEN         1500
+#define SUPERVISOR		0xFFFF
+
+/* global csme socket structure */
+struct sockaddr_csme sockaddrcsme;
+struct csme_ackopt ack_opt;
+
+/* this is the control MAC address of the device */	
+unsigned char dev_mac[6]={0x00,0x11,0x22,0x33,0x44,0x55};
+
+/* descriptor of the msp_control socket */
+int msp_control_sockfd;
+
+/* Prefilled buffer for get arm version; Note the payload is in BE */
+char get_device_arm_version[8]={0x08,		/* msg length*/
+				0x00,		/* index */
+				0x01,		/* Command Type query */
+				0x06,		/* Command Class device */
+				0x21,0x00,	/* Function code GET_ARM_CODE_VERSION */
+				0x00,0x00};	/* Reserved */
+
+/*------------------------------------------------------------------*/
+static int init_interface(char *interface_name)
+{
+	int result;
+	 
+	msp_control_sockfd = socket(AF_CSME, SOCK_DGRAM, ETH_P_CSME_BE); /* the ETH_P_CSME must be in BE */
+	if(msp_control_sockfd < 0) 
+	{
+		printf("Error creating csme socket %s\n", strerror(errno));
+		return msp_control_sockfd;
+	}
+
+	sockaddrcsme.scsme_family = AF_CSME;
+	sockaddrcsme.scsme_ifindex = if_nametoindex(interface_name);
+	memcpy(&sockaddrcsme.scsme_devmac, dev_mac, 6);
+	sockaddrcsme.scsme_opcode = CSME_OPCODE_CONTROL_BE; /* the CSME_OPCODE_CONTROL must be in BE */
+
+	memcpy(&ack_opt.scsme_devmac, &sockaddrcsme.scsme_devmac, 6);
+	ack_opt.scsme_ifindex = sockaddrcsme.scsme_ifindex;
+	ack_opt.ack_suppression = 0;
+
+	result = setsockopt(msp_control_sockfd, SOL_CSM_ENCAPS, CSME_ACK_ENABLE, &ack_opt, sizeof(struct csme_ackopt));
+	if (result <0)
+	{
+		printf("setsockopt failed %d; %s\n", result, strerror(errno));
+		return result;
+		
+	}
+
+	return 0;
+
+}
+
+/*------------------------------------------------------------------*/
+static int recv_msp_msg(int in_sockfd)
+{
+	socklen_t sock_len;
+	int i, len;
+	char *rcv_buf;
+	struct sockaddr_csme rcv_sockaddrcsme;
+
+	rcv_buf = (char *)malloc(MAX_MSP_MSG_LEN);
+	if(rcv_buf == NULL)
+	{
+		printf("Receive buffer allocation\n");
+		return -1;
+	}
+	else
+	{
+		sock_len = sizeof(struct sockaddr_csme);
+		len = recvfrom (in_sockfd, (char *)rcv_buf, MAX_MSP_MSG_LEN, 0, (struct sockaddr *)&rcv_sockaddrcsme, &sock_len);
+		printf("Received %d bytes\n", len); 
+		printf("length 0x%02x\n", rcv_buf[0]);
+		printf("index 0x%02x\n", rcv_buf[1]);
+		printf("Command Type 0x%02x\n", rcv_buf[2]);
+		printf("Command Class 0x%02x\n", rcv_buf[3]);
+		printf("Function Code 0x%04x\n", rcv_buf[4]);
+		printf("Reserved 0x%04x\n", rcv_buf[6]);
+		printf("Payload: "); 
+		for (i = 8; i < len; i++)
+			printf("0x%02x ", rcv_buf[i]);
+		printf("\n");	
+		return 0;
+	}
+
+	free(rcv_buf);
+}
+
+/*------------------------------------------------------------------*/
+static int send_msg_to_channel(int in_sockfd, char *in_buf, int in_buf_size, unsigned short channel)
+{
+	int bytes_sent;
+	struct sockaddr_csme stSockAddr;
+	
+	memcpy(&stSockAddr, &sockaddrcsme, sizeof(struct sockaddr_csme));
+	/* we are not in boot phase*/
+	stSockAddr.scsme_flags = 0x1;
+
+	stSockAddr.scsme_channelid = channel; /*channel (need to be in Network order) */
+
+	bytes_sent = sendto(in_sockfd, (char *)in_buf, in_buf_size, MSG_DONTWAIT, (struct sockaddr *)&stSockAddr, sizeof(sockaddrcsme)); 
+	
+	return bytes_sent;
+}
+
+/*------------------------------------------------------------------*/
+static int wait_for_response(void)
+{
+	fd_set read_fd;
+	int max_fds;
+	int result;
+	
+	FD_ZERO(&read_fd);
+	FD_SET(msp_control_sockfd, &read_fd);
+	
+	max_fds = msp_control_sockfd + 1;
+	
+	/* wait for reception */
+	result = select(max_fds, &read_fd, 0, 0, NULL);
+	if (result <= 0)
+	{
+		printf("Select error =%s\n", strerror(errno));
+		return (result);
+	}
+
+	if (FD_ISSET(msp_control_sockfd, &read_fd))
+	{
+		/* read the message from the device */
+		result = recv_msp_msg(msp_control_sockfd);
+	}
+
+	return result;
+}
+
+/*------------------------------------------------------------------*/
+int main(int argc, char** argv)
+{
+	int result;
+	
+	/* in master mode the control interface is always eth1 in slave mode it could differ */
+	result = init_interface("eth1");
+	if (result < 0)
+	{
+		printf("Fail to init interface: %s\n", strerror(errno));
+		return (result);
+	}
+              
+	result = send_msg_to_channel(msp_control_sockfd, get_device_arm_version, sizeof(get_device_arm_version), SUPERVISOR);
+	if (result < 0)
+	{
+		printf("Failed to send msg = %s\n", strerror(errno));
+		return (result);
+	}
+
+	result = wait_for_response();
+	return 0;
+}
+
