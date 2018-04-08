@@ -25,17 +25,17 @@ int main(int argc,char *args[])
 //check
 	if(argc < 3)
 	{
-		printf("error args aes e/d src_file dest_file\n");
+		printf("error args aes -e/d src_file dest_file\n");
 		return -1;
 	}
-	if(args[1][0] == 'd')
+	if(args[1][1] == 'd')
 	{
-		printf("*********decode file***********\n");
+		printf("***********Decode File***********\n");
 		decode=1;
 	}
-	else if(args[1][0] == 'e')
+	else if(args[1][1] == 'e')
 	{
-		printf("*********encode file***********\n");
+		printf("***********Encode File***********\n");
 		decode=0;
 	}
 	else
@@ -47,21 +47,25 @@ int main(int argc,char *args[])
 	fp_src = fopen(args[2],"rb");
 	if(fp_src == NULL)
 	{
-		printf("open input file error\n");
+		printf("[error]:open input file error\n");
 		return -1;
 	}
 
 	fp_des = fopen(args[3],"wb+");
 	if(fp_des == NULL)
 	{
-		printf("open output file error\n");
+		printf("[error]:open output file error\n");
 		return -1;
 	}
 //get input file size
     fseek(fp_src, 0L, SEEK_END);
     filesize = ftell(fp_src);  //不能超过2g，否则不正确 
     fseek(fp_src, 0L, SEEK_SET);
-    printf("input file size: %luB\n",filesize);
+    printf("Input  File  : %s\n",args[2]);
+    printf("Output File  : %s\n",args[3]);
+    printf("File   Size  : %ldB [%ldMB]\n",filesize,filesize/1024/1024);
+	printf("*********************************\n");
+
 //now do it
 	AesGenTables();			    //初始化Aes表	
 	AesCbc_Init(&g_aes,g_iv);   //初始化cbc向量表
@@ -75,7 +79,7 @@ int main(int argc,char *args[])
 			Aes_SetKeyDecode(&g_aes.aes,g_key,32);
 	}
 	
-	printf("process :   ");
+	printf("Process      :          ");
 	percent=0;
 	for(i=0; i < filesize; )
 	{
@@ -84,12 +88,14 @@ int main(int argc,char *args[])
 		if(percent != tmp)
 		{
 			percent = tmp;
-			printf("\b \b\b \b");
-			printf("%02d",percent);
+			printf("\b \b\b \b\b \b");
+			printf("%02d%%",percent);
 			fflush(stdout);
 		}
 		
-		size = fread(buf,1,1024,fp_src);
+		size = fread(buf,1,131072,fp_src);
+		if(size ==0)
+            break;
 		if(decode == 0)
 		{
 				AesCbc_Encode(&g_aes, buf, size);		//加密
@@ -103,7 +109,7 @@ int main(int argc,char *args[])
 	}
 	
 //finish	
-	printf("\n**********finish***********\n");
+	printf("\n*************Finish**************\n");
 	fclose(fp_des);
 	fclose(fp_src);	
 	return 0;	
