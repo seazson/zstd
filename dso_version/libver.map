@@ -1,0 +1,7 @@
+Version1.0 {
+global: add;sub;
+    local: *;
+};
+Version2.0 {
+    global: add;
+};

@@ -1,0 +1,14 @@
+MOD 0x400000	0x602000	/data/source/elf_dwarf/test1 (deleted)
+MOD 0x7f4891808000	0x7f4891bce000	/lib/x86_64-linux-gnu/libc-2.23.so
+MOD 0x7f4891bd2000	0x7f4891df9000	/lib/x86_64-linux-gnu/ld-2.23.so
+MOD 0x7ffdd01dc000	0x7ffdd01de000	[vdso: 5779]
+TID 5779:
+# 0 0x400782    	<null>
+# 1 0x4007a1 - 1	<null>
+# 2 0x4007c7 - 1	<null>
+# 3 0x4007ed - 1	<null>
+# 4 0x400810 - 1	<null>
+# 5 0x400842 - 1	<null>
+# 6 0x400870 - 1	<null>
+# 7 0x7f4891828840 - 1	__libc_start_main
+# 8 0x4005f9 - 1	<null>

@@ -1,0 +1,20 @@
+1编译安装
+cd aer_drv
+make
+sudo insmod aer_inject.ko aer_mask_override=1
+
+cd ..
+cd aer-inject
+make
+
+
+2 运行
+sudo ./aer-inject --id=xx:xx:x file
+
+
+例如
+sudo ./aer-inject --id=14:00.0 examples/correctable 
+
+注意：文件格式可以参考examples目录下的文件。对于firmware first的方式只能一次只能注错一个。
+使用完成之后需要卸载模块
+sudo rmmod aer_inject
