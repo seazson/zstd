@@ -1,0 +1,2 @@
+all:
+	clang++ -g -O3 c3.cpp -I/usr/lib/llvm-3.8/include -fPIC -fvisibility-inlines-hidden -Wall -W -Wno-unused-parameter -Wwrite-strings -Wcast-qual -Wno-missing-field-initializers -pedantic -Wno-long-long -Wno-maybe-uninitialized -Wdelete-non-virtual-dtor -Wno-comment -std=c++14 -ffunction-sections -fdata-sections -O2 -g -DNDEBUG  -fno-exceptions -D_GNU_SOURCE -D__STDC_CONSTANT_MACROS -D__STDC_FORMAT_MACROS -D__STDC_LIMIT_MACROS -L/usr/lib/llvm-3.8/lib -lLLVMCore -lLLVMSupport -lrt -ldl -ltinfo -lpthread -lz -lm -o c3
